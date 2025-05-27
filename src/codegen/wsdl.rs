@@ -1,23 +1,207 @@
 //! Generate WSDL document and endpoint
 
-use crate::parser::{ServiceConfig, SoapOperation, TypeInfo};
+use crate::parser::{FieldType, ServiceConfig, SoapOperation, TypeInfo};
+use std::collections::HashMap;
 
 pub fn generate_wsdl(
-    _config: &ServiceConfig,
-    _operations: &[SoapOperation],
-    _types: &[TypeInfo],
+    config: &ServiceConfig,
+    operations: &[SoapOperation],
+    types: &HashMap<String, TypeInfo>,
 ) -> String {
-    // TODO: Generate complete WSDL document
-    // TODO: Include type definitions (XSD schema)
-    // TODO: Define messages, port types, bindings, services
-    // TODO: Use proper SOAP 1.1/1.2 bindings
-    String::from("<!-- TODO: WSDL generation not implemented -->")
+    let schema_types = generate_schema_types(types);
+    let messages = generate_messages(operations);
+    let port_type = generate_port_type(config, operations);
+    let binding = generate_binding(config, operations);
+    let service = generate_service(config);
+    
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
+             xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+             xmlns:tns="{namespace}"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             targetNamespace="{namespace}"
+             elementFormDefault="qualified">
+
+    <types>
+        <xsd:schema targetNamespace="{namespace}" elementFormDefault="qualified">
+{schema_types}
+        </xsd:schema>
+    </types>
+
+{messages}
+
+{port_type}
+
+{binding}
+
+{service}
+
+</definitions>"#,
+        namespace = config.namespace,
+        schema_types = schema_types,
+        messages = messages,
+        port_type = port_type,
+        binding = binding,
+        service = service,
+    )
+}
+
+fn generate_schema_types(types: &HashMap<String, TypeInfo>) -> String {
+    let mut schema = String::new();
+    
+    for (type_name, type_info) in types {
+        schema.push_str(&format!(
+            r#"            <xsd:element name="{}" type="tns:{}Type"/>
+            <xsd:complexType name="{}Type">
+                <xsd:sequence>
+"#,
+            type_name, type_name, type_name
+        ));
+        
+        for field in &type_info.fields {
+            let xsd_type = field_type_to_xsd(&field.field_type);
+            let min_occurs = if field.optional { " minOccurs=\"0\"" } else { "" };
+            
+            schema.push_str(&format!(
+                r#"                    <xsd:element name="{}" type="{}"{}/>"#,
+                field.xml_name, xsd_type, min_occurs
+            ));
+            schema.push('\n');
+        }
+        
+        schema.push_str(
+            r#"                </xsd:sequence>
+            </xsd:complexType>
+"#,
+        );
+    }
+    
+    schema
+}
+
+fn generate_messages(operations: &[SoapOperation]) -> String {
+    let mut messages = String::new();
+    
+    for operation in operations {
+        let request_type = extract_type_name(&operation.request_type);
+        let response_type = extract_type_name(&operation.response_type);
+        
+        messages.push_str(&format!(
+            r#"    <message name="{}Request">
+        <part name="parameters" element="tns:{}"/>
+    </message>
+    
+    <message name="{}Response">
+        <part name="parameters" element="tns:{}"/>
+    </message>
+    
+"#,
+            operation.name, request_type, operation.name, response_type
+        ));
+    }
+    
+    messages
+}
+
+fn generate_port_type(config: &ServiceConfig, operations: &[SoapOperation]) -> String {
+    let mut port_type = format!(
+        r#"    <portType name="{}">
+"#,
+        config.port_name
+    );
+    
+    for operation in operations {
+        port_type.push_str(&format!(
+            r#"        <operation name="{}">
+            <input message="tns:{}Request"/>
+            <output message="tns:{}Response"/>
+        </operation>
+"#,
+            operation.name, operation.name, operation.name
+        ));
+    }
+    
+    port_type.push_str("    </portType>\n");
+    port_type
+}
+
+fn generate_binding(config: &ServiceConfig, operations: &[SoapOperation]) -> String {
+    let binding_name = format!("{}Binding", config.service_name);
+    let mut binding = format!(
+        r#"    <binding name="{}" type="tns:{}">
+        <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+"#,
+        binding_name, config.port_name
+    );
+    
+    for operation in operations {
+        let soap_action = format!("{}/{}", config.namespace, operation.name);
+        binding.push_str(&format!(
+            r#"        <operation name="{}">
+            <soap:operation soapAction="{}"/>
+            <input>
+                <soap:body use="literal"/>
+            </input>
+            <output>
+                <soap:body use="literal"/>
+            </output>
+        </operation>
+"#,
+            operation.name, soap_action
+        ));
+    }
+    
+    binding.push_str("    </binding>\n");
+    binding
+}
+
+fn generate_service(config: &ServiceConfig) -> String {
+    let binding_name = format!("{}Binding", config.service_name);
+    
+    format!(
+        r#"    <service name="{}">
+        <port name="{}" binding="tns:{}">
+            <soap:address location="http://localhost:8080{}"/>
+        </port>
+    </service>"#,
+        config.service_name, config.port_name, binding_name, config.bind_path
+    )
+}
+
+fn extract_type_name(ty: &syn::Type) -> String {
+    match ty {
+        syn::Type::Path(type_path) => type_path
+            .path
+            .segments
+            .last()
+            .map(|segment| segment.ident.to_string())
+            .unwrap_or_else(|| "Unknown".to_string()),
+        _ => "Unknown".to_string(),
+    }
+}
+
+fn field_type_to_xsd(field_type: &FieldType) -> String {
+    match field_type {
+        FieldType::String => "xsd:string".to_string(),
+        FieldType::I32 => "xsd:int".to_string(),
+        FieldType::I64 => "xsd:long".to_string(),
+        FieldType::F32 => "xsd:float".to_string(),
+        FieldType::F64 => "xsd:double".to_string(),
+        FieldType::Bool => "xsd:boolean".to_string(),
+        FieldType::Optional(inner) => field_type_to_xsd(inner),
+        FieldType::Vec(inner) => {
+            // For arrays, we'll use the inner type but mark as maxOccurs="unbounded"
+            field_type_to_xsd(inner)
+        }
+        FieldType::Custom(name) => format!("tns:{}Type", name),
+    }
 }
 
 pub fn rust_type_to_xsd_type(rust_type: &str) -> &str {
     match rust_type {
         "i32" => "xsd:int",
-        "i64" => "xsd:long",
+        "i64" => "xsd:long", 
         "f32" => "xsd:float",
         "f64" => "xsd:double",
         "String" => "xsd:string",

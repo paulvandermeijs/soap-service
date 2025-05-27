@@ -1,0 +1,37 @@
+[package]
+name = "soap-service"
+version = "0.1.0"
+edition = "2021"
+description = "Rust macro that transforms modules into SOAP webservices."
+license = "MIT" 
+authors = ["Paul van der Meijs"]
+repository = "https://github.com/paulvandermeijs/soap-service"
+keywords = ["soap", "web-service", "axum"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+# Proc macro essentials
+proc-macro2 = "1.0"
+syn = { version = "2.0", features = ["full", "extra-traits", "visit"] }
+quote = "1.0"
+
+# XML processing
+serde = { version = "1.0", features = ["derive"] }
+serde-xml-rs = "0.6"
+quick-xml = { version = "0.31", features = ["serialize"] }
+
+# Optional runtime dependencies (for generated code)
+axum = { version = "0.7", optional = true }
+tokio = { version = "1.0", features = ["full"], optional = true }
+
+[features]
+default = ["runtime"]
+runtime = ["axum", "tokio"]
+
+[dev-dependencies]
+axum = "0.7"
+tokio = { version = "1.0", features = ["full"] }
+tower = "0.4"
+hyper = "1.0"

@@ -1,0 +1,10 @@
+[package]
+name = "calculator-example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+soap-service = { path = "../.." }
+axum = "0.7"
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }

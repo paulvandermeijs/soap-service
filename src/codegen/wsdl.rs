@@ -1,6 +1,6 @@
 //! Generate WSDL document and endpoint
 
-use crate::parser::{FieldType, ServiceConfig, SoapOperation, TypeInfo};
+use crate::parser::{ServiceConfig, SoapOperation, TypeInfo};
 use std::collections::HashMap;
 
 pub fn generate_wsdl(
@@ -60,7 +60,7 @@ fn generate_schema_types(types: &HashMap<String, TypeInfo>) -> String {
         ));
         
         for field in &type_info.fields {
-            let xsd_type = field_type_to_xsd(&field.field_type);
+            let xsd_type = &field.field_type;
             let min_occurs = if field.optional { " minOccurs=\"0\"" } else { "" };
             
             schema.push_str(&format!(
@@ -181,31 +181,4 @@ fn extract_type_name(ty: &syn::Type) -> String {
     }
 }
 
-fn field_type_to_xsd(field_type: &FieldType) -> String {
-    match field_type {
-        FieldType::String => "xsd:string".to_string(),
-        FieldType::I32 => "xsd:int".to_string(),
-        FieldType::I64 => "xsd:long".to_string(),
-        FieldType::F32 => "xsd:float".to_string(),
-        FieldType::F64 => "xsd:double".to_string(),
-        FieldType::Bool => "xsd:boolean".to_string(),
-        FieldType::Optional(inner) => field_type_to_xsd(inner),
-        FieldType::Vec(inner) => {
-            // For arrays, we'll use the inner type but mark as maxOccurs="unbounded"
-            field_type_to_xsd(inner)
-        }
-        FieldType::Custom(name) => format!("tns:{}Type", name),
-    }
-}
 
-pub fn rust_type_to_xsd_type(rust_type: &str) -> &str {
-    match rust_type {
-        "i32" => "xsd:int",
-        "i64" => "xsd:long", 
-        "f32" => "xsd:float",
-        "f64" => "xsd:double",
-        "String" => "xsd:string",
-        "bool" => "xsd:boolean",
-        _ => "xsd:string", // fallback
-    }
-}

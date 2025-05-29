@@ -1,5 +1,4 @@
 use soap_service::service;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub struct ServiceError(pub String);

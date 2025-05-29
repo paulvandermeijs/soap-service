@@ -1,7 +1,5 @@
 mod codegen;
 mod parser;
-mod schema;
-mod soap;
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -34,22 +32,22 @@ fn generate_enhanced_module(
     let bind_path = &config.bind_path;
     let wsdl_path = format!("{}/wsdl", bind_path);
     let namespace = &config.namespace;
-    
+
     // Collect type information
     let types = match parser::collect_types_from_operations(&operations) {
         Ok(types) => types,
         Err(_) => std::collections::HashMap::new(),
     };
-    
+
     // Generate WSDL content
     let wsdl_content = codegen::generate_wsdl(&config, &operations, &types);
-    
+
     // Generate operation dispatcher
     let operation_handlers = generate_operation_handlers(&operations, namespace);
-    
+
     let router_code = quote! {
         use std::collections::HashMap;
-        
+
         pub fn router() -> axum::Router {
             axum::Router::new()
                 .route(#bind_path, axum::routing::post(soap_handler))
@@ -82,28 +80,28 @@ fn generate_enhanced_module(
             let parsed_request = parse_soap_envelope(xml)?;
             let operation = &parsed_request.operation;
             let body_content = &parsed_request.body_xml;
-            
+
             #operation_handlers
-            
+
             Err(format!("Unknown operation: {}", operation))
         }
-        
+
         #[derive(Debug)]
         struct ParsedSoapRequest {
             operation: String,
             body_xml: String,
             namespace: Option<String>,
         }
-        
+
         fn parse_soap_envelope(xml: &str) -> Result<ParsedSoapRequest, String> {
             // Handle different SOAP Body variations
             let body_start_patterns = ["<soap:Body>", "<SOAP-ENV:Body>", "<Body>"];
             let body_end_patterns = ["</soap:Body>", "</SOAP-ENV:Body>", "</Body>"];
-            
+
             let mut body_start_pos = None;
             let mut body_end_pos = None;
             let mut body_tag_len = 0;
-            
+
             // Find body start
             for pattern in &body_start_patterns {
                 if let Some(pos) = xml.find(pattern) {
@@ -112,7 +110,7 @@ fn generate_enhanced_module(
                     break;
                 }
             }
-            
+
             // Find body end
             for pattern in &body_end_patterns {
                 if let Some(pos) = xml.find(pattern) {
@@ -120,46 +118,46 @@ fn generate_enhanced_module(
                     break;
                 }
             }
-            
+
             let body_start = body_start_pos.ok_or("SOAP Body start tag not found")?;
             let body_end = body_end_pos.ok_or("SOAP Body end tag not found")?;
-            
+
             if body_start + body_tag_len >= body_end {
                 return Err("Invalid SOAP Body structure".to_string());
             }
-            
+
             let body_content = &xml[body_start + body_tag_len..body_end];
             let trimmed_body = body_content.trim();
-            
+
             // Extract operation name from first element in body
             let operation = extract_first_element_name(trimmed_body)?;
-            
+
             Ok(ParsedSoapRequest {
                 operation,
                 body_xml: trimmed_body.to_string(),
                 namespace: extract_target_namespace(xml),
             })
         }
-        
+
         fn extract_first_element_name(xml: &str) -> Result<String, String> {
             let xml = xml.trim();
             if !xml.starts_with('<') {
                 return Err("No XML element found".to_string());
             }
-            
+
             let after_bracket = &xml[1..];
             let tag_end = after_bracket.find('>')
                 .ok_or("Invalid XML: no closing bracket found")?;
-            
+
             let tag_content = &after_bracket[..tag_end];
-            
+
             // Handle self-closing tags
             let tag_name = if tag_content.ends_with('/') {
                 &tag_content[..tag_content.len() - 1]
             } else {
                 tag_content
             };
-            
+
             // Remove namespace prefix and attributes
             let clean_name = tag_name.split_whitespace().next().unwrap_or(tag_name);
             let operation = if clean_name.contains(':') {
@@ -167,10 +165,10 @@ fn generate_enhanced_module(
             } else {
                 clean_name
             };
-            
+
             Ok(operation.to_string())
         }
-        
+
         fn extract_target_namespace(xml: &str) -> Option<String> {
             // Look for targetNamespace or xmlns attributes
             if let Some(start) = xml.find("targetNamespace=\"") {
@@ -179,7 +177,7 @@ fn generate_enhanced_module(
                     return Some(after_start[..end].to_string());
                 }
             }
-            
+
             // Fallback to default xmlns
             if let Some(start) = xml.find("xmlns=\"") {
                 let after_start = &xml[start + 7..];
@@ -187,10 +185,10 @@ fn generate_enhanced_module(
                     return Some(after_start[..end].to_string());
                 }
             }
-            
+
             None
         }
-        
+
         fn create_simple_soap_response(content: &str, operation: &str, namespace: &str) -> String {
             format!(
                 r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -205,7 +203,7 @@ fn generate_enhanced_module(
                 namespace, operation, content, operation
             )
         }
-        
+
         fn extract_xml_value(xml: &str, tag_name: &str) -> Option<String> {
             // Try multiple patterns to handle namespaces and variations
             let patterns = [
@@ -214,16 +212,16 @@ fn generate_enhanced_module(
                 format!("<tns:{}>", tag_name),
                 format!("<ns1:{}>", tag_name),
             ];
-            
+
             for start_pattern in &patterns {
                 if let Some(start_pos) = xml.find(start_pattern) {
                     // Find the actual end of the opening tag
                     let tag_start = start_pos + start_pattern.len();
                     let remaining = &xml[start_pos..];
-                    
+
                     if let Some(close_bracket) = remaining.find('>') {
                         let content_start = start_pos + close_bracket + 1;
-                        
+
                         // Look for the closing tag
                         let end_patterns = [
                             format!("</{}>", tag_name),
@@ -231,7 +229,7 @@ fn generate_enhanced_module(
                             format!("</tns:{}>", tag_name),
                             format!("</ns1:{}>", tag_name),
                         ];
-                        
+
                         for end_pattern in &end_patterns {
                             if let Some(end_pos) = xml[content_start..].find(end_pattern) {
                                 let actual_end = content_start + end_pos;
@@ -241,7 +239,7 @@ fn generate_enhanced_module(
                                 }
                             }
                         }
-                        
+
                         // Handle self-closing tags like <tag/>
                         if remaining[..close_bracket].ends_with('/') {
                             return Some(String::new());
@@ -251,7 +249,7 @@ fn generate_enhanced_module(
             }
             None
         }
-        
+
         fn decode_xml_content(content: &str) -> String {
             content
                 .replace("&lt;", "<")
@@ -260,9 +258,9 @@ fn generate_enhanced_module(
                 .replace("&quot;", "\"")
                 .replace("&apos;", "'")
         }
-        
+
         // Generic request parsing using serde_xml_rs directly on operation XML
-        fn parse_request_from_xml<T>(xml: &str) -> Result<T, String> 
+        fn parse_request_from_xml<T>(xml: &str) -> Result<T, String>
         where
             T: for<'de> ::serde::Deserialize<'de>,
         {
@@ -271,10 +269,10 @@ fn generate_enhanced_module(
             ::serde_xml_rs::from_str(xml)
                 .map_err(|e| format!("XML deserialization error: {} for XML: {}", e, xml))
         }
-        
-        
+
+
         // Generic response serialization using serde_xml_rs
-        fn serialize_response_to_xml<T>(response: &T) -> Result<String, String> 
+        fn serialize_response_to_xml<T>(response: &T) -> Result<String, String>
         where
             T: ::serde::Serialize,
         {
@@ -282,7 +280,7 @@ fn generate_enhanced_module(
             ::serde_xml_rs::to_string(response)
                 .map_err(|e| format!("XML serialization error: {}", e))
         }
-        
+
 
         fn create_soap_fault(error: &str) -> String {
             format!(
@@ -301,7 +299,7 @@ fn generate_enhanced_module(
 
         async fn wsdl_handler() -> axum::response::Response {
             let wsdl = #wsdl_content;
-            
+
             axum::response::Response::builder()
                 .status(200)
                 .header("Content-Type", "text/xml; charset=utf-8")
@@ -321,15 +319,18 @@ fn generate_enhanced_module(
     quote! { #module }
 }
 
-fn generate_operation_handlers(operations: &[parser::SoapOperation], namespace: &str) -> TokenStream2 {
+fn generate_operation_handlers(
+    operations: &[parser::SoapOperation],
+    namespace: &str,
+) -> TokenStream2 {
     let mut handlers = Vec::new();
-    
+
     for operation in operations {
         let op_name = &operation.name;
         let func_name = &operation.function_name;
         let request_type = &operation.request_type;
         let response_type = &operation.response_type;
-        
+
         handlers.push(quote! {
             if operation == #op_name {
                 // Generic XML parsing using serde
@@ -337,31 +338,22 @@ fn generate_operation_handlers(operations: &[parser::SoapOperation], namespace: 
                     Ok(data) => data,
                     Err(e) => return Err(format!("Failed to parse request: {}", e)),
                 };
-                
+
                 let result: #response_type = #func_name(request_data).await
                     .map_err(|e| format!("Operation failed: {}", e))?;
-                
+
                 // Generic response serialization using serde
                 let response_xml = match serialize_response_to_xml(&result) {
                     Ok(xml) => xml,
                     Err(e) => return Err(format!("Failed to serialize response: {}", e)),
                 };
-                
+
                 return Ok(create_simple_soap_response(&response_xml, #op_name, #namespace));
             }
         });
     }
-    
+
     quote! {
         #(#handlers)*
-    }
-}
-
-fn extract_type_name(ty: &syn::Type) -> syn::Ident {
-    match ty {
-        syn::Type::Path(type_path) => {
-            type_path.path.segments.last().unwrap().ident.clone()
-        }
-        _ => syn::Ident::new("Unknown", proc_macro2::Span::call_site()),
     }
 }

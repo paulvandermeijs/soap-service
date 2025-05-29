@@ -11,7 +11,6 @@ pub struct SoapOperation {
     pub function_name: Ident,
     pub request_type: Type,
     pub response_type: Type,
-    pub error_type: Type,
 }
 
 pub fn extract_soap_operations(module: &ItemMod) -> Result<Vec<SoapOperation>> {
@@ -51,14 +50,13 @@ fn parse_soap_function(func: &ItemFn) -> Result<SoapOperation> {
     
     // Validate function signature
     let request_type = extract_request_type(func)?;
-    let (response_type, error_type) = extract_return_types(func)?;
+    let (response_type, _error_type) = extract_return_types(func)?;
     
     Ok(SoapOperation {
         name,
         function_name,
         request_type,
         response_type,
-        error_type,
     })
 }
 

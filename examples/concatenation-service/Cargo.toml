@@ -1,15 +1,7 @@
 [package]
-name = "calculator-example"
+name = "concatenation-service"
 version = "0.1.0"
 edition = "2021"
-
-[[bin]]
-name = "calculator-example"
-path = "src/main.rs"
-
-[[bin]]
-name = "multiplication-example"
-path = "src/multiplication_example.rs"
 
 [dependencies]
 soap-service = { path = "../.." }

@@ -261,45 +261,28 @@ fn generate_enhanced_module(
                 .replace("&apos;", "'")
         }
         
-        // Generic request parsing - for now, implement for AddRequest specifically
+        // Generic request parsing using serde_xml_rs directly on operation XML
         fn parse_request_from_xml<T>(xml: &str) -> Result<T, String> 
         where
-            T: std::str::FromStr + Default,
-            T::Err: std::fmt::Display,
+            T: for<'de> ::serde::Deserialize<'de>,
         {
-            // This is a simplified implementation
-            // In a real implementation, this would use serde_xml_rs or similar
-            Err("Generic parsing not yet implemented".to_string())
+            // The xml parameter is already the operation content (e.g., "<Add><Operand1>123</Operand1><Operand2>456</Operand2></Add>")
+            // Use serde_xml_rs to deserialize it directly
+            ::serde_xml_rs::from_str(xml)
+                .map_err(|e| format!("XML deserialization error: {} for XML: {}", e, xml))
         }
         
-        // Specific implementation for AddRequest (hack for demo)
-        fn parse_add_request_from_xml(xml: &str) -> Result<AddRequest, String> {
-            let a = extract_xml_value(xml, "Operand1")
-                .or_else(|| extract_xml_value(xml, "a"))
-                .unwrap_or("0".to_string())
-                .parse::<i32>()
-                .map_err(|e| format!("Invalid Operand1: {}", e))?;
-                
-            let b = extract_xml_value(xml, "Operand2")
-                .or_else(|| extract_xml_value(xml, "b"))
-                .unwrap_or("0".to_string())
-                .parse::<i32>()
-                .map_err(|e| format!("Invalid Operand2: {}", e))?;
-            
-            Ok(AddRequest { a, b })
+        
+        // Generic response serialization using serde_xml_rs
+        fn serialize_response_to_xml<T>(response: &T) -> Result<String, String> 
+        where
+            T: ::serde::Serialize,
+        {
+            // Use serde_xml_rs for serialization
+            ::serde_xml_rs::to_string(response)
+                .map_err(|e| format!("XML serialization error: {}", e))
         }
         
-        // Generic response serialization
-        fn serialize_response_to_xml<T>(response: &T) -> Result<String, String> {
-            // This is a simplified implementation
-            // In a real implementation, this would use serde_xml_rs
-            Err("Generic serialization not yet implemented".to_string())
-        }
-        
-        // Specific implementation for AddResponse (hack for demo)
-        fn serialize_add_response_to_xml(response: &AddResponse) -> Result<String, String> {
-            Ok(format!("<Result>{}</Result>", response.sum))
-        }
 
         fn create_soap_fault(error: &str) -> String {
             format!(
@@ -344,21 +327,22 @@ fn generate_operation_handlers(operations: &[parser::SoapOperation], namespace: 
     for operation in operations {
         let op_name = &operation.name;
         let func_name = &operation.function_name;
-        let request_type = extract_type_name(&operation.request_type);
+        let request_type = &operation.request_type;
+        let response_type = &operation.response_type;
         
         handlers.push(quote! {
             if operation == #op_name {
-                // Enhanced XML parsing with better error handling
-                let request_data = match parse_add_request_from_xml(&body_content) {
+                // Generic XML parsing using serde
+                let request_data: #request_type = match parse_request_from_xml(&body_content) {
                     Ok(data) => data,
                     Err(e) => return Err(format!("Failed to parse request: {}", e)),
                 };
                 
-                let result = #func_name(request_data).await
+                let result: #response_type = #func_name(request_data).await
                     .map_err(|e| format!("Operation failed: {}", e))?;
                 
-                // Serialize response with proper XML structure
-                let response_xml = match serialize_add_response_to_xml(&result) {
+                // Generic response serialization using serde
+                let response_xml = match serialize_response_to_xml(&result) {
                     Ok(xml) => xml,
                     Err(e) => return Err(format!("Failed to serialize response: {}", e)),
                 };

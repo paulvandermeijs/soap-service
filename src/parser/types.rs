@@ -16,6 +16,10 @@ pub struct FieldInfo {
     pub optional: bool,
 }
 
+/// Analyzes a Rust type and creates TypeInfo for WSDL generation.
+/// 
+/// Currently creates placeholder TypeInfo with empty fields.
+/// Future implementation would extract actual struct field information.
 pub fn analyze_type(ty: &Type) -> Result<TypeInfo> {
     match ty {
         Type::Path(type_path) => {
@@ -35,6 +39,7 @@ pub fn analyze_type(ty: &Type) -> Result<TypeInfo> {
     }
 }
 
+/// Extracts the type name from a TypePath, returning the last segment.
 fn extract_type_name(type_path: &TypePath) -> String {
     type_path
         .path
@@ -44,6 +49,10 @@ fn extract_type_name(type_path: &TypePath) -> String {
         .unwrap_or_else(|| "Unknown".to_string())
 }
 
+/// Collects all unique types from SOAP operations for WSDL generation.
+/// 
+/// Analyzes request and response types from all operations and returns
+/// a map of type names to TypeInfo structs.
 pub fn collect_types_from_operations(
     operations: &[crate::parser::SoapOperation],
 ) -> Result<HashMap<String, TypeInfo>> {

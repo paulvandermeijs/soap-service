@@ -45,6 +45,10 @@ impl Parse for ServiceAttributes {
     }
 }
 
+/// Parses the #[service(...)] attribute arguments into a validated ServiceConfig.
+/// 
+/// Expects namespace, service_name, port_name, and bind_path attributes.
+/// Validates that all required fields are present and properly formatted.
 pub fn parse_service_attributes(args: TokenStream) -> Result<ServiceConfig> {
     let parsed = syn::parse2::<ServiceAttributes>(args)?;
     
@@ -102,6 +106,7 @@ pub fn parse_service_attributes(args: TokenStream) -> Result<ServiceConfig> {
     })
 }
 
+/// Validates that the namespace is a proper URI starting with http:// or https://.
 fn validate_namespace(namespace: &str) -> Result<()> {
     if namespace.is_empty() {
         return Err(Error::new(
@@ -121,6 +126,7 @@ fn validate_namespace(namespace: &str) -> Result<()> {
     Ok(())
 }
 
+/// Validates that a value is a proper identifier (alphanumeric + underscores, starts with letter/underscore).
 fn validate_identifier(value: &str, field_name: &str) -> Result<()> {
     if value.is_empty() {
         return Err(Error::new(
@@ -147,6 +153,7 @@ fn validate_identifier(value: &str, field_name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Validates that the bind path starts with '/' and is not just the root path.
 fn validate_bind_path(path: &str) -> Result<()> {
     if !path.starts_with('/') {
         return Err(Error::new(

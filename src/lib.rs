@@ -6,6 +6,10 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse_macro_input, ItemMod};
 
+/// Transforms a module into a SOAP web service with automatic router and WSDL generation.
+/// 
+/// Takes service configuration attributes and generates Axum handlers, XML parsing,
+/// and WSDL endpoints for all async functions in the annotated module.
 #[proc_macro_attribute]
 pub fn service(args: TokenStream, input: TokenStream) -> TokenStream {
     let config = match parser::parse_service_attributes(args.into()) {
@@ -24,6 +28,10 @@ pub fn service(args: TokenStream, input: TokenStream) -> TokenStream {
     enhanced_module.into()
 }
 
+/// Generates the enhanced module with SOAP service functionality.
+/// 
+/// Creates router functions, SOAP handlers, WSDL endpoints, and operation dispatchers
+/// for the given service configuration and extracted operations.
 fn generate_enhanced_module(
     mut module: ItemMod,
     config: parser::ServiceConfig,
@@ -319,6 +327,10 @@ fn generate_enhanced_module(
     quote! { #module }
 }
 
+/// Generates SOAP operation handlers for dispatching requests to service functions.
+/// 
+/// Creates conditional branches that parse XML requests, call the appropriate async function,
+/// and serialize responses back to SOAP XML format.
 fn generate_operation_handlers(
     operations: &[parser::SoapOperation],
     namespace: &str,

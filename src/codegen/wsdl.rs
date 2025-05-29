@@ -3,6 +3,10 @@
 use crate::parser::{ServiceConfig, SoapOperation, TypeInfo};
 use std::collections::HashMap;
 
+/// Generates a complete WSDL document for the SOAP service.
+/// 
+/// Creates all WSDL sections including types, messages, port types, bindings,
+/// and service definitions based on the service configuration and operations.
 pub fn generate_wsdl(
     config: &ServiceConfig,
     operations: &[SoapOperation],
@@ -47,6 +51,7 @@ pub fn generate_wsdl(
     )
 }
 
+/// Generates XSD schema type definitions for all request/response types.
 fn generate_schema_types(types: &HashMap<String, TypeInfo>) -> String {
     let mut schema = String::new();
     
@@ -80,6 +85,9 @@ fn generate_schema_types(types: &HashMap<String, TypeInfo>) -> String {
     schema
 }
 
+/// Generates WSDL message definitions for all SOAP operations.
+/// 
+/// Creates request and response message elements for each operation.
 fn generate_messages(operations: &[SoapOperation]) -> String {
     let mut messages = String::new();
     
@@ -104,6 +112,9 @@ fn generate_messages(operations: &[SoapOperation]) -> String {
     messages
 }
 
+/// Generates the WSDL port type defining the service interface.
+/// 
+/// Lists all operations with their input and output message types.
 fn generate_port_type(config: &ServiceConfig, operations: &[SoapOperation]) -> String {
     let mut port_type = format!(
         r#"    <portType name="{}">
@@ -126,6 +137,9 @@ fn generate_port_type(config: &ServiceConfig, operations: &[SoapOperation]) -> S
     port_type
 }
 
+/// Generates SOAP binding configuration for the service.
+/// 
+/// Defines the SOAP transport and message format for each operation.
 fn generate_binding(config: &ServiceConfig, operations: &[SoapOperation]) -> String {
     let binding_name = format!("{}Binding", config.service_name);
     let mut binding = format!(
@@ -156,6 +170,7 @@ fn generate_binding(config: &ServiceConfig, operations: &[SoapOperation]) -> Str
     binding
 }
 
+/// Generates the WSDL service definition with endpoint location.
 fn generate_service(config: &ServiceConfig) -> String {
     let binding_name = format!("{}Binding", config.service_name);
     
@@ -169,6 +184,7 @@ fn generate_service(config: &ServiceConfig) -> String {
     )
 }
 
+/// Extracts the type name from a syn::Type for WSDL generation.
 fn extract_type_name(ty: &syn::Type) -> String {
     match ty {
         syn::Type::Path(type_path) => type_path

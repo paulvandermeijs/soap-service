@@ -13,6 +13,10 @@ pub struct SoapOperation {
     pub response_type: Type,
 }
 
+/// Extracts SOAP operations from all valid async functions in a module.
+/// 
+/// Searches for public async functions with the correct signature and converts
+/// them into SoapOperation structs with extracted type information.
 pub fn extract_soap_operations(module: &ItemMod) -> Result<Vec<SoapOperation>> {
     let mut operations = Vec::new();
     
@@ -30,6 +34,7 @@ pub fn extract_soap_operations(module: &ItemMod) -> Result<Vec<SoapOperation>> {
     Ok(operations)
 }
 
+/// Checks if a function is valid for SOAP operations (public and async).
 fn is_valid_soap_function(func: &ItemFn) -> Result<bool> {
     // Check if function is public
     if !matches!(func.vis, Visibility::Public(_)) {
@@ -44,6 +49,9 @@ fn is_valid_soap_function(func: &ItemFn) -> Result<bool> {
     Ok(true)
 }
 
+/// Parses a valid async function into a SoapOperation with extracted types.
+/// 
+/// Validates the function signature and extracts request/response types.
 fn parse_soap_function(func: &ItemFn) -> Result<SoapOperation> {
     let function_name = func.sig.ident.clone();
     let name = generate_operation_name(&function_name);
@@ -60,6 +68,9 @@ fn parse_soap_function(func: &ItemFn) -> Result<SoapOperation> {
     })
 }
 
+/// Converts snake_case function names to PascalCase operation names.
+/// 
+/// Example: `add_numbers` becomes `AddNumbers`.
 fn generate_operation_name(function_name: &Ident) -> String {
     // Convert snake_case function name to PascalCase operation name
     let func_str = function_name.to_string();
@@ -75,6 +86,9 @@ fn generate_operation_name(function_name: &Ident) -> String {
         .collect()
 }
 
+/// Extracts the request type from a function's single parameter.
+/// 
+/// Validates that the function has exactly one parameter (no self).
 fn extract_request_type(func: &ItemFn) -> Result<Type> {
     let inputs = &func.sig.inputs;
     
@@ -95,6 +109,9 @@ fn extract_request_type(func: &ItemFn) -> Result<Type> {
     }
 }
 
+/// Extracts response and error types from a Result<T, E> return type.
+/// 
+/// Validates that the function returns Result<ResponseType, ErrorType>.
 fn extract_return_types(func: &ItemFn) -> Result<(Type, Type)> {
     let return_type = match &func.sig.output {
         ReturnType::Default => {
